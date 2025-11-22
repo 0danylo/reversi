@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 import argparse
-from strategies import RandomStrategy, GreedyStrategy, CornerFirstStrategy, AlphaBetaStrategy
+from strategies import RandomStrategy, GreedyStrategy, CornerFirstStrategy, AlphaBetaStrategy, AlphaBetaImprovedStrategy
 from engine import play_game
 
 def parse_board_lines(lines):
@@ -32,6 +32,8 @@ def strategy_from_name(name):
     name = name.lower()
     if name == 'ab':
         return AlphaBetaStrategy()
+    if name in ('ab2', 'ab_improved', 'ab+'): 
+        return AlphaBetaImprovedStrategy()
     if name == "random":
         return RandomStrategy()
     if name == "greedy":
@@ -51,7 +53,9 @@ def main():
     parser.add_argument("input", help="input file with 8 board lines (diamond layout)")
     parser.add_argument("--black", default="greedy", help="strategy for black (player 1). options: random, greedy, corner")
     parser.add_argument("--white", default="random", help="strategy for white (player 2).")
-    parser.add_argument("--depth", type=int, default=3, help="alpha-beta search depth (when using 'ab' strategy)")
+    parser.add_argument("--depth", type=int, default=3, help="global alpha-beta search depth (used when per-player depth not provided)")
+    parser.add_argument("--black-depth", "-B", type=int, default=None, help="alpha-beta depth for black when using 'ab' (overrides --depth)")
+    parser.add_argument("--white-depth", "-W", type=int, default=None, help="alpha-beta depth for white when using 'ab' (overrides --depth)")
     parser.add_argument("--verbose", action="store_true")
     args = parser.parse_args()
 
@@ -60,14 +64,20 @@ def main():
 
     board = parse_board_lines(lines)
 
-    # pass depth into AB strategies when requested
-    def make(name):
-        if name.lower() == 'ab':
-            return AlphaBetaStrategy(depth=args.depth)
+    # pass depth into AB strategies when requested; per-player depth overrides global
+    def make(name, is_black=False):
+        nl = name.lower()
+        if nl == 'ab':
+            # choose per-player depth if provided, otherwise fall back to global
+            if is_black:
+                d = args.black_depth if args.black_depth is not None else args.depth
+            else:
+                d = args.white_depth if args.white_depth is not None else args.depth
+            return AlphaBetaStrategy(depth=d)
         return strategy_from_name(name)
 
-    black = make(args.black)
-    white = make(args.white)
+    black = make(args.black, is_black=True)
+    white = make(args.white, is_black=False)
 
     final_board, counts, winner = play_game(board, black, white, verbose=args.verbose)
 

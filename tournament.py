@@ -15,6 +15,8 @@ def make_strategy(name, depth=None):
         return strategies.CornerFirstStrategy()
     if n in ("ab", "alphabeta"):
         return strategies.AlphaBetaStrategy(depth=depth if depth is not None else 3)
+    if n in ("ab2", "ab_improved", "ab+"):
+        return strategies.AlphaBetaImprovedStrategy(depth=depth if depth is not None else 3)
     raise SystemExit(f"Unknown strategy: {name}")
 
 
