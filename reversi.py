@@ -20,10 +20,6 @@ def read_board():
             except ValueError:
                 vals.append(0)
 
-        # pad with zeros if the row was short or missing
-        if len(vals) < ln:
-            vals += [0] * (ln - len(vals))
-
         board.append(vals)
 
     # print([print(b) for b in board], len(board), [len(b) for b in board])
@@ -79,7 +75,7 @@ def get_legal_moves(board, me=1, opp=2):
                 
                 # Walk in this direction, collecting opponent pieces
                 while is_on_board(rr, cc) and board[rr][cc] == opp:
-                    flips.append((rr+1, cc+1))
+                    flips.append((rr, cc))
                     
                     prev_rr = rr
                     rr = rr + dr
@@ -109,7 +105,7 @@ def score_move(board, move, me=1, opp=2):
         score += 10000
 
     # edges: any cell on outermost row or at start/end of its row
-    if r == 0 or r == len(board)-1 or c == 0 or c == len(board[r]) - 1:
+    if r == 0 or r == len(board) - 1 or c == 0 or c == len(board[r]) - 1:
         score += 200
     
     # number of disks flipped
@@ -148,7 +144,7 @@ def choose_move(board):
         if s > best_score:
             best_score = s
             best = m
-    
+
     return best
 
 def main():
@@ -158,10 +154,9 @@ def main():
     
     move = choose_move(board)
     if move is None:
-        # no legal move: print 0 0 as a pass indicator
         print("0 0")
     else:
-        r,c,_ = move
+        r, c, _ = move
         # output 1-based row and column
         print(f"{r+1} {c+1}")
 
