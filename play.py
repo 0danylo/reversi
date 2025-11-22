@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 import argparse
-from strategies import RandomStrategy, GreedyStrategy, CornerFirstStrategy
+from strategies import RandomStrategy, GreedyStrategy, CornerFirstStrategy, AlphaBetaStrategy
 from engine import play_game
 
 def parse_board_lines(lines):
@@ -30,6 +30,8 @@ def parse_board_lines(lines):
 
 def strategy_from_name(name):
     name = name.lower()
+    if name == 'ab':
+      return AlphaBetaStrategy()
     if name == "random":
         return RandomStrategy()
     if name == "greedy":
