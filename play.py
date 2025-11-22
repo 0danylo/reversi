@@ -31,7 +31,7 @@ def parse_board_lines(lines):
 def strategy_from_name(name):
     name = name.lower()
     if name == 'ab':
-      return AlphaBetaStrategy()
+        return AlphaBetaStrategy()
     if name == "random":
         return RandomStrategy()
     if name == "greedy":
@@ -51,6 +51,7 @@ def main():
     parser.add_argument("input", help="input file with 8 board lines (diamond layout)")
     parser.add_argument("--black", default="greedy", help="strategy for black (player 1). options: random, greedy, corner")
     parser.add_argument("--white", default="random", help="strategy for white (player 2).")
+    parser.add_argument("--depth", type=int, default=3, help="alpha-beta search depth (when using 'ab' strategy)")
     parser.add_argument("--verbose", action="store_true")
     args = parser.parse_args()
 
@@ -59,8 +60,14 @@ def main():
 
     board = parse_board_lines(lines)
 
-    black = strategy_from_name(args.black)
-    white = strategy_from_name(args.white)
+    # pass depth into AB strategies when requested
+    def make(name):
+        if name.lower() == 'ab':
+            return AlphaBetaStrategy(depth=args.depth)
+        return strategy_from_name(name)
+
+    black = make(args.black)
+    white = make(args.white)
 
     final_board, counts, winner = play_game(board, black, white, verbose=args.verbose)
 

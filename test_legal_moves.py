@@ -24,7 +24,7 @@ def test_visualize_moves():
     # Mark legal moves with 'X' (we'll use -1 to represent it)
     move_positions = set()
     for r, c, flips in moves:
-        move_positions.add((r, c))
+        move_positions.add((r, c)) 
         display_board[r][c] = -1  # -1 represents a legal move
     
     # Print the board
@@ -52,7 +52,7 @@ def test_visualize_moves():
     
     print(f"\nFound {len(moves)} legal moves:")
     for r, c, flips in moves:
-        print(f"  Row {r+1}, Col {c+1} - flips {flips}")
+        print(f"  Row {r+1}, Col {c+1} - flips {[(r+1, c+1) for (r,c) in flips]}") # add one because input for tournament is 1-indexed
 
 if __name__ == '__main__':
     test_visualize_moves()
