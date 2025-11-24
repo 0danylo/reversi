@@ -50,15 +50,19 @@ def print_board(board):
 
 def main():
     parser = argparse.ArgumentParser(description="Play a single Reversi match between two strategies")
-    parser.add_argument("input", help="input file with 8 board lines (diamond layout)")
+    # parser.add_argument("input", help="input file with 8 board lines (diamond layout)")
     parser.add_argument("--black", default="greedy", help="strategy for black (player 1). options: random, greedy, corner")
     parser.add_argument("--white", default="random", help="strategy for white (player 2).")
     parser.add_argument("--depth", type=int, default=3, help="global alpha-beta search depth (used when per-player depth not provided)")
     parser.add_argument("--black-depth", "-B", type=int, default=None, help="alpha-beta depth for black when using 'ab' (overrides --depth)")
     parser.add_argument("--white-depth", "-W", type=int, default=None, help="alpha-beta depth for white when using 'ab' (overrides --depth)")
+    parser.add_argument("--time", type=float, default=3.0, help="global per-move time budget in seconds for AB strategies (default 3s)")
+    parser.add_argument("--black-time", type=float, default=None, help="per-move time budget for black AB strategy (overrides --time)")
+    parser.add_argument("--white-time", type=float, default=None, help="per-move time budget for white AB strategy (overrides --time)")
     parser.add_argument("--verbose", action="store_true")
     args = parser.parse_args()
 
+    args.input = 'start_board.txt'
     with open(args.input, "r") as f:
         lines = [l.rstrip("\n") for l in f.readlines()]
 
@@ -71,9 +75,19 @@ def main():
             # choose per-player depth if provided, otherwise fall back to global
             if is_black:
                 d = args.black_depth if args.black_depth is not None else args.depth
+                t = args.black_time if args.black_time is not None else args.time
             else:
                 d = args.white_depth if args.white_depth is not None else args.depth
-            return AlphaBetaStrategy(depth=d)
+                t = args.white_time if args.white_time is not None else args.time
+            return AlphaBetaStrategy(depth=d, max_time=t)
+        if nl in ('ab2', 'ab_improved', 'ab+'):
+            if is_black:
+                d = args.black_depth if args.black_depth is not None else args.depth
+                t = args.black_time if args.black_time is not None else args.time
+            else:
+                d = args.white_depth if args.white_depth is not None else args.depth
+                t = args.white_time if args.white_time is not None else args.time
+            return AlphaBetaImprovedStrategy(depth=d, max_time=t)
         return strategy_from_name(name)
 
     black = make(args.black, is_black=True)

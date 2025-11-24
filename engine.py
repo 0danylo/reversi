@@ -22,7 +22,7 @@ def count_disks(board):
     return {1: cnt1, 2: cnt2}
 
 
-def play_game(board, black_strategy, white_strategy, verbose=False):
+def play_game(board, black_strategy, white_strategy, verbose=False, show_moves=False):
     """Play a single game between two strategy objects.
 
     black_strategy: strategy for player 1
@@ -52,11 +52,11 @@ def play_game(board, black_strategy, white_strategy, verbose=False):
 
             apply_move(board, move, me)
             consecutive_passes = 0
-            if verbose:
+            if show_moves:
                 print(f"Player {me} plays {(move[0]+1, move[1]+1)} flipping {len(move[2])}")
         else:
             consecutive_passes += 1
-            if verbose:
+            if show_moves:
                 print(f"Player {me} passes")
             if consecutive_passes >= 2:
                 break
