@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import argparse
 import time
+import random
 from copy import deepcopy
 from play import parse_board_lines, parse_board_lines_rect, strategy_from_name
 import reversi
@@ -23,6 +24,14 @@ def make_strategy(name, depth, max_time):
         return strategies.AlphaBetaStrategy(depth=depth, max_time=max_time)
     if name in ('ab2', 'ab_improved', 'ab+'):
         return strategies.AlphaBetaImprovedStrategy(depth=depth, max_time=max_time)
+    if name in ('ab_opt', 'ab3'):
+        return strategies.AlphaBetaOptimizedStrategy(depth=depth, max_time=max_time)
+    if name in ('ab_tt', 'ab_transposition'):
+        return strategies.AlphaBetaTTStrategy(depth=depth, max_time=max_time)
+    if name in ('ab_bit', 'ab_bitboard'):
+        return strategies.AlphaBetaBitboardStrategy(depth=depth, max_time=max_time)
+    if name in ('ab_bit_tt', 'ab_bitboard_tt'):
+        return strategies.AlphaBetaBitboardTTStrategy(depth=depth, max_time=max_time)
     return strategy_from_name(name)
 
 
@@ -84,17 +93,24 @@ if __name__ == '__main__':
     parser.add_argument('--black', default='ab2', help='Black strategy')
     parser.add_argument('--white', default='ab', help='White strategy')
     parser.add_argument('--depth', type=int, default=4, help='Depth for AB strategies')
-    parser.add_argument('--time', type=float, default=0.5, help='Time for AB strategies')
+    parser.add_argument('--black-depth', type=int, help='Depth for Black strategy (overrides --depth)')
+    parser.add_argument('--white-depth', type=int, help='Depth for White strategy (overrides --depth)')
+    parser.add_argument('--time', type=float, default=0, help='Time for AB strategies (0=no limit)')
     parser.add_argument('--black-time', type=float, help='Time for Black strategy (overrides --time)')
     parser.add_argument('--white-time', type=float, help='Time for White strategy (overrides --time)')
+    parser.add_argument('--seed', type=int, default=42, help='Random seed')
     parser.add_argument('--rect', action='store_true', help='Use rectangular board parser')
     parser.add_argument('board', nargs='?', default='start_board.txt')
     args = parser.parse_args()
 
+    random.seed(args.seed)
+
     b_time = args.black_time if args.black_time is not None else args.time
     w_time = args.white_time if args.white_time is not None else args.time
+    b_depth = args.black_depth if args.black_depth is not None else args.depth
+    w_depth = args.white_depth if args.white_depth is not None else args.depth
 
     board = load_board(args.board, rect=args.rect)
-    black = make_strategy(args.black, args.depth, b_time)
-    white = make_strategy(args.white, args.depth, w_time)
+    black = make_strategy(args.black, b_depth, b_time)
+    white = make_strategy(args.white, w_depth, w_time)
     run_one(board, black, white, show_board=True)

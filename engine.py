@@ -22,11 +22,12 @@ def count_disks(board):
     return {1: cnt1, 2: cnt2}
 
 
-def play_game(board, black_strategy, white_strategy, verbose=False, show_moves=False):
+def play_game(board, black_strategy, white_strategy, verbose=False, show_moves=False, progress_callback=None):
     """Play a single game between two strategy objects.
 
     black_strategy: strategy for player 1
     white_strategy: strategy for player 2
+    progress_callback: optional callable to be called after each move
     Returns: (final_board, counts, winner) where winner is 1,2 or 0 for tie.
     """
     board = deepcopy(board)
@@ -54,6 +55,9 @@ def play_game(board, black_strategy, white_strategy, verbose=False, show_moves=F
             consecutive_passes = 0
             if show_moves:
                 print(f"Player {me} plays {(move[0]+1, move[1]+1)} flipping {len(move[2])}")
+            
+            if progress_callback:
+                progress_callback(board, me)
         else:
             consecutive_passes += 1
             if show_moves:
