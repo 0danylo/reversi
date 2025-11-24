@@ -28,6 +28,30 @@ def parse_board_lines(lines):
     return board
 
 
+def parse_board_lines_rect(lines):
+    """Parse a regular rectangular 8x8 board from lines.
+
+    Each of the first 8 lines should contain 8 integers (0,1,2) separated by
+    spaces. Missing values are treated as 0. Returns a list of 8 lists.
+    """
+    board = []
+    for i in range(8):
+        if i < len(lines):
+            parts = lines[i].strip().split()
+        else:
+            parts = []
+        vals = []
+        for j, tok in enumerate(parts[:8]):
+            try:
+                vals.append(int(tok))
+            except Exception:
+                vals.append(0)
+        if len(vals) < 8:
+            vals += [0] * (8 - len(vals))
+        board.append(vals)
+    return board
+
+
 def strategy_from_name(name):
     name = name.lower()
     if name == 'ab':
@@ -93,6 +117,7 @@ def main():
     black = make(args.black, is_black=True)
     white = make(args.white, is_black=False)
 
+    print(f"Black (player 1) = {args.black}, White (player 2) = {args.white}")
     final_board, counts, winner = play_game(board, black, white, verbose=args.verbose)
 
     print("Final board:")
@@ -100,8 +125,10 @@ def main():
     print(f"Counts: black= {counts[1]} white= {counts[2]}")
     if winner == 0:
         print("Result: tie")
+    elif winner == 1:
+        print(f"Winner: Black (player 1) — {args.black}")
     else:
-        print(f"Winner: player {winner}")
+        print(f"Winner: White (player 2) — {args.white}")
 
 
 if __name__ == '__main__':

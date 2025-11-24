@@ -49,8 +49,10 @@ def get_legal_moves(board, me=1, opp=2):
     moves = []  # (r,c,flipped_positions_list)
     
     # Calculate row offsets for diamond centering
-    # Max row length is 14 (rows 3 and 4)
-    max_len = 14
+    # Compute max row length from the provided board so both diamond-shaped
+    # and rectangular boards are supported. For diamond layouts this will
+    # be 14, while for a regular 8x8 board it will be 8 (and offsets zero).
+    max_len = max(len(row) for row in board) if board else 0
     row_offsets = [(max_len - len(board[r])) // 2 for r in range(len(board))]
     
     # Iterate through all rows

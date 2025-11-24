@@ -349,7 +349,8 @@ def ab_improved_worker(conn, board_arg, me_arg, opp_arg, max_depth):
                     alpha = val
 
             try:
-                conn.send(best_move)
+                # send (depth, move) so callers can profile depth reached
+                conn.send((depth_limit, best_move))
             except Exception:
                 pass
 
@@ -446,7 +447,20 @@ class AlphaBetaImprovedStrategy(AlphaBetaStrategy):
                 while True:
                     if parent_conn.poll(timeout=remaining):
                         try:
-                            last_move = parent_conn.recv()
+                            res = parent_conn.recv()
+                            if isinstance(res, tuple) and len(res) == 2:
+                                depth_val, mv = res
+                                last_move = mv
+                                try:
+                                    self.last_depth = depth_val
+                                except Exception:
+                                    pass
+                            else:
+                                last_move = res
+                                try:
+                                    self.last_depth = None
+                                except Exception:
+                                    pass
                         except EOFError:
                             pass
                     if not p.is_alive():
@@ -460,7 +474,20 @@ class AlphaBetaImprovedStrategy(AlphaBetaStrategy):
                     p.join(timeout=0.1)
                 while parent_conn.poll(timeout=0.01):
                     try:
-                        last_move = parent_conn.recv()
+                        res = parent_conn.recv()
+                        if isinstance(res, tuple) and len(res) == 2:
+                            depth_val, mv = res
+                            last_move = mv
+                            try:
+                                self.last_depth = depth_val
+                            except Exception:
+                                pass
+                        else:
+                            last_move = res
+                            try:
+                                self.last_depth = None
+                            except Exception:
+                                pass
                     except EOFError:
                         break
                 parent_conn.close()
@@ -478,7 +505,20 @@ class AlphaBetaImprovedStrategy(AlphaBetaStrategy):
         while True:
             if parent_conn.poll(timeout=0.1):
                 try:
-                    last_move = parent_conn.recv()
+                    res = parent_conn.recv()
+                    if isinstance(res, tuple) and len(res) == 2:
+                        depth_val, mv = res
+                        last_move = mv
+                        try:
+                            self.last_depth = depth_val
+                        except Exception:
+                            pass
+                    else:
+                        last_move = res
+                        try:
+                            self.last_depth = None
+                        except Exception:
+                            pass
                 except EOFError:
                     pass
             if not p.is_alive():

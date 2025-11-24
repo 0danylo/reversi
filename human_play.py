@@ -104,10 +104,10 @@ def print_board(board, moves_map=None, highlight_positions=None):
     row_offsets = [(max_len - len(board[r])) // 2 for r in range(len(board))]
 
     def cell_symbol(v):
-        if v == 1:
-            return '●'
-        if v == 2:
+        if v == 1: # black
             return '○'
+        if v == 2:
+            return '●'
         return '.'
 
     # print a single global column header on top
@@ -166,15 +166,19 @@ def main():
     # best-effort: if the returned strategy has 'depth' attribute leave as-is
 
     print(f"Starting game: Human plays {'Black' if human_is_black else 'White'}, opponent={args.opponent}")
-    final_board, counts, winner = engine.play_game(board, black, white, verbose=True)
+    print(f"Black (player 1) = {'Human' if human_is_black else args.opponent}, White (player 2) = {args.opponent if human_is_black else 'Human'}")
+    # In interactive mode we want to show per-move output, so enable show_moves.
+    final_board, counts, winner = engine.play_game(board, black, white, verbose=False, show_moves=True)
 
     print('\nFinal board:')
     print_board(final_board)
     print(f"Counts: black= {counts[1]} white= {counts[2]}")
     if winner == 0:
         print("Result: tie")
+    elif winner == 1:
+        print(f"Winner: Black (player 1) — {'Human' if human_is_black else args.opponent}")
     else:
-        print(f"Winner: player {winner}")
+        print(f"Winner: White (player 2) — {args.opponent if human_is_black else 'Human'}")
 
 
 if __name__ == '__main__':

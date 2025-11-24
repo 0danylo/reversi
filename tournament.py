@@ -118,6 +118,7 @@ def compare_strategy(board, target_name, opponents, games_per_opponent=10, depth
 def main():
     parser = argparse.ArgumentParser(description="Compare one strategy against all others")
     parser.add_argument("input", help="input file with 8 board lines (diamond layout)")
+    parser.add_argument("--rect", action="store_true", help="interpret input as regular rectangular 8x8 board")
     parser.add_argument("--strategy", default="greedy", help="strategy to test: random, greedy, corner, ab")
     parser.add_argument("--games", type=int, default=10, help="games per opponent (will alternate colors)")
     parser.add_argument("--depth", type=int, default=3, help="alpha-beta search depth for AB strategy")
@@ -128,7 +129,12 @@ def main():
     with open(args.input, "r") as f:
         lines = [l.rstrip("\n") for l in f.readlines()]
 
-    board = parse_board_lines(lines)
+    if args.rect:
+        # use rectangular 8x8 parser
+        from play import parse_board_lines_rect
+        board = parse_board_lines_rect(lines)
+    else:
+        board = parse_board_lines(lines)
 
     # attach max_time to compare_strategy so worker jobs can see it
     compare_strategy.max_time = args.time
