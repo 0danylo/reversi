@@ -1,5 +1,6 @@
 import random
 import time
+from collections import OrderedDict
 from copy import deepcopy as _deepcopy
 import reversi
 from copy import deepcopy
@@ -425,6 +426,148 @@ class AlphaBetaOptimizedStrategy(AlphaBetaImprovedStrategy):
         return best_move if best_move else moves[0]
 
 
+class AlphaBetaTTStrategy(AlphaBetaOptimizedStrategy):
+    """Alpha-Beta strategy with Transposition Table."""
+    name = "ab_tt"
+
+    def __init__(self, depth=3, max_time=3.0, max_tt_size=1000000):
+        super().__init__(depth=depth, max_time=max_time)
+        self.tt = OrderedDict()
+        self.max_tt_size = max_tt_size
+
+    def choose_move(self, board, me=1, opp=2):
+        reversi.board_global = board
+        moves = reversi.get_legal_moves(board, me, opp)
+        if not moves:
+            return None
+
+        start_time = time.time()
+        best_move = None
+
+        def undo_move(b, move, player):
+            r, c, flips = move
+            b[r][c] = 0
+            other = 1 if player == 2 else 2
+            for fr, fc in flips:
+                b[fr][fc] = other
+
+        def board_to_key(b, player):
+            return (tuple(tuple(row) for row in b), player)
+
+        def alphabeta_tt(b, depth, alpha, beta, current_player):
+            if self.max_time and self.max_time > 0:
+                if time.time() - start_time > self.max_time:
+                    raise TimeoutError()
+
+            key = board_to_key(b, current_player)
+            if key in self.tt:
+                entry = self.tt[key]
+                self.tt.move_to_end(key)
+                if entry['depth'] >= depth:
+                    if entry['flag'] == 'exact':
+                        return entry['value']
+                    elif entry['flag'] == 'lowerbound':
+                        alpha = max(alpha, entry['value'])
+                    elif entry['flag'] == 'upperbound':
+                        beta = min(beta, entry['value'])
+                    if alpha >= beta:
+                        return entry['value']
+
+            other = 1 if current_player == 2 else 2
+            reversi.board_global = b
+            moves_here = reversi.get_legal_moves(b, current_player, other)
+            
+            if depth == 0 or not moves_here:
+                if not moves_here:
+                    moves_other = reversi.get_legal_moves(b, other, current_player)
+                    if not moves_other:
+                        val = self.evaluate(b, me, opp)
+                        # Store in transposition table
+                        if len(self.tt) >= self.max_tt_size:
+                            self.tt.popitem(last=False)
+                        self.tt[key] = {'depth': depth, 'value': val, 'flag': 'exact'}
+                        return val
+                val = self.evaluate(b, me, opp)
+                
+                if len(self.tt) >= self.max_tt_size:
+                    self.tt.popitem(last=False)
+                self.tt[key] = {'depth': depth, 'value': val, 'flag': 'exact'}
+                return val
+
+            moves_here = sorted(moves_here, key=lambda mv: reversi.score_move(b, mv, current_player, other), reverse=True)
+
+            original_alpha = alpha
+            
+            if current_player == me:
+                value = -10**9
+                for mv in moves_here:
+                    engine.apply_move(b, mv, current_player)
+                    val = alphabeta_tt(b, depth - 1, alpha, beta, other)
+                    undo_move(b, mv, current_player)
+                    
+                    if val > value:
+                        value = val
+                    if value > alpha:
+                        alpha = value
+                    if alpha >= beta:
+                        break
+            else:
+                value = 10**9
+                for mv in moves_here:
+                    engine.apply_move(b, mv, current_player)
+                    val = alphabeta_tt(b, depth - 1, alpha, beta, other)
+                    undo_move(b, mv, current_player)
+                    
+                    if val < value:
+                        value = val
+                    if value < beta:
+                        beta = value
+                    if alpha >= beta:
+                        break
+            
+            flag = 'exact'
+            if value <= original_alpha:
+                flag = 'upperbound'
+            elif value >= beta:
+                flag = 'lowerbound'
+            
+            if len(self.tt) >= self.max_tt_size:
+                self.tt.popitem(last=False)
+            self.tt[key] = {'depth': depth, 'value': value, 'flag': flag}
+            
+            return value
+
+        try:
+            search_board = _deepcopy(board)
+            empty_squares = sum(row.count(0) for row in board)
+            effective_max_depth = min(self.depth, empty_squares)
+
+            for depth_limit in range(1, max(1, effective_max_depth) + 1):
+                ordered_moves = sorted(reversi.get_legal_moves(search_board, me, opp), key=lambda mv: reversi.score_move(search_board, mv, me, opp), reverse=True)
+                current_best_move = None
+                best_val = -10**9
+                alpha = -10**9
+                beta = 10**9
+                
+                for mv in ordered_moves:
+                    engine.apply_move(search_board, mv, me)
+                    val = alphabeta_tt(search_board, depth_limit - 1, alpha, beta, opp)
+                    undo_move(search_board, mv, me)
+                    
+                    if val > best_val:
+                        best_val = val
+                        current_best_move = mv
+                    if val > alpha:
+                        alpha = val
+                
+                best_move = current_best_move
+                self.last_depth = depth_limit
+        except TimeoutError:
+            pass
+
+        return best_move if best_move else moves[0]
+
+
 class AlphaBetaBitboardStrategy(AlphaBetaImprovedStrategy):
     """Alpha-Beta strategy using bitboards for performance.
     Assumes the standard 88-square board structure defined in reversi.py.
@@ -435,7 +578,9 @@ class AlphaBetaBitboardStrategy(AlphaBetaImprovedStrategy):
         super().__init__(depth=depth, max_time=max_time)
         # Precompute bitboard constants
         self.ROW_OFFSETS = [3, 2, 1, 0, 0, 1, 2, 3]
-        self.WIDTH = 14
+        # Use WIDTH=15 to ensure at least 1 bit of padding between rows (max row len is 14)
+        # This prevents horizontal wrapping from one row to the next.
+        self.WIDTH = 15
         self.HEIGHT = 8
         self.TOTAL_BITS = self.WIDTH * self.HEIGHT
         
@@ -452,17 +597,17 @@ class AlphaBetaBitboardStrategy(AlphaBetaImprovedStrategy):
                 row_mask |= (1 << idx)
             self.ROW_MASKS.append(row_mask)
 
-        # Directions shifts in the aligned 8x14 grid
+        # Directions shifts in the aligned 8x15 grid
         # (dr, dc) -> shift
         # (0, 1) -> +1
         # (0, -1) -> -1
-        # (1, 0) -> +14
-        # (-1, 0) -> -14
-        # (1, 1) -> +15
-        # (1, -1) -> +13
-        # (-1, 1) -> -13
-        # (-1, -1) -> -15
-        self.SHIFTS = [1, -1, 14, -14, 15, 13, -13, -15]
+        # (1, 0) -> +15
+        # (-1, 0) -> -15
+        # (1, 1) -> +16
+        # (1, -1) -> +14
+        # (-1, 1) -> -14
+        # (-1, -1) -> -16
+        self.SHIFTS = [1, -1, 15, -15, 16, 14, -14, -16]
 
         # Precompute evaluation masks
         self.CORNER_MASK = 0
@@ -617,87 +762,38 @@ class AlphaBetaBitboardStrategy(AlphaBetaImprovedStrategy):
 
     def choose_move(self, board, me=1, opp=2):
         reversi.board_global = board
-        # Get legal moves for final return value matching
-        legal_moves_list = reversi.get_legal_moves(board, me, opp)
-        if not legal_moves_list:
+        moves = reversi.get_legal_moves(board, me, opp)
+        if not moves:
             return None
 
         start_time = time.time()
-        
-        # Convert to bitboards
-        me_bb, opp_bb = self.to_bitboard(board, me, opp)
-        
-        best_move_idx = None
+        best_move = None
 
-        def get_move_score(idx, my_b, op_b):
-            mask = (1 << idx)
-            s = 0
-            
-            # Corner
-            if mask & self.CORNER_MASK:
-                s += 10000
-            # Edge
-            elif mask & self.EDGE_MASK:
-                s += 200
-                
-            # Flips (expensive? relative to deepcopy it is cheap)
-            flips = self.get_flips_bb(idx, my_b, op_b)
-            s += bin(flips).count('1') * 10
-            
-            # Corner Adjacency Penalty
-            if mask & self.CORNER_ADJ_MASK:
-                c_idx = self.ADJ_TO_CORNER.get(idx)
-                if c_idx is not None:
-                    # Check if that corner is empty
-                    if not ((my_b | op_b) & (1 << c_idx)):
-                        s -= 800
-            
-            # Tie-breaker (prefer top-left)
-            # idx is roughly r*WIDTH + c. Higher idx is lower on board.
-            # We want to subtract a small amount for higher idx.
-            s -= idx * 0.001
-            return s
-
-        def alphabeta_bb(my_b, op_b, depth, alpha, beta, maximizing):
+        def alphabeta_local(b, depth, alpha, beta, current_player):
             if self.max_time and self.max_time > 0:
                 if time.time() - start_time > self.max_time:
                     raise TimeoutError()
 
-            moves_mask = self.get_moves_bb(my_b, op_b)
-            
-            if depth == 0 or moves_mask == 0:
-                if moves_mask == 0:
-                    # Check if opponent has moves
-                    opp_moves_mask = self.get_moves_bb(op_b, my_b)
-                    if opp_moves_mask == 0:
-                        # Game over
-                        return self.evaluate_bb(my_b if maximizing else op_b, op_b if maximizing else my_b)
-                    # Pass
-                    return alphabeta_bb(op_b, my_b, depth, alpha, beta, not maximizing)
-                
-                return self.evaluate_bb(my_b if maximizing else op_b, op_b if maximizing else my_b)
+            other = 1 if current_player == 2 else 2
+            reversi.board_global = b
+            moves_here = reversi.get_legal_moves(b, current_player, other)
+            if depth == 0 or not moves_here:
+                if not moves_here:
+                    moves_other = reversi.get_legal_moves(b, other, current_player)
+                    if not moves_other:
+                        return self.evaluate(b, me, opp)
+                    return alphabeta_local(b, depth, alpha, beta, other)
+                return self.evaluate(b, me, opp)
 
-            # Extract moves from mask
-            move_indices = []
-            temp_mask = moves_mask
-            while temp_mask:
-                # Get lowest set bit
-                lsb = temp_mask & -temp_mask
-                idx = lsb.bit_length() - 1
-                move_indices.append(idx)
-                temp_mask ^= lsb
+            # order moves by greedy heuristic
+            moves_here = sorted(moves_here, key=lambda mv: reversi.score_move(b, mv, current_player, other), reverse=True)
 
-            # Sort moves for better pruning
-            move_indices.sort(key=lambda idx: get_move_score(idx, my_b, op_b), reverse=True)
-            
-            if maximizing:
+            if current_player == me:
                 value = -10**9
-                for idx in move_indices:
-                    flips = self.get_flips_bb(idx, my_b, op_b)
-                    new_my = my_b | (1 << idx) | flips
-                    new_op = op_b & ~flips
-                    
-                    val = alphabeta_bb(new_op, new_my, depth - 1, alpha, beta, False)
+                for mv in moves_here:
+                    nb = _deepcopy(b)
+                    engine.apply_move(nb, mv, current_player)
+                    val = alphabeta_local(nb, depth - 1, alpha, beta, other)
                     if val > value:
                         value = val
                     if value > alpha:
@@ -707,12 +803,10 @@ class AlphaBetaBitboardStrategy(AlphaBetaImprovedStrategy):
                 return value
             else:
                 value = 10**9
-                for idx in move_indices:
-                    flips = self.get_flips_bb(idx, my_b, op_b)
-                    new_my = my_b | (1 << idx) | flips
-                    new_op = op_b & ~flips
-                    
-                    val = alphabeta_bb(new_op, new_my, depth - 1, alpha, beta, True)
+                for mv in moves_here:
+                    nb = _deepcopy(b)
+                    engine.apply_move(nb, mv, current_player)
+                    val = alphabeta_local(nb, depth - 1, alpha, beta, other)
                     if val < value:
                         value = val
                     if value < beta:
@@ -727,267 +821,6 @@ class AlphaBetaBitboardStrategy(AlphaBetaImprovedStrategy):
             effective_max_depth = min(self.depth, empty_squares)
 
             for depth_limit in range(1, max(1, effective_max_depth) + 1):
-                moves_mask = self.get_moves_bb(me_bb, opp_bb)
-                if not moves_mask:
-                    break
-                    
-                move_indices = []
-                temp_mask = moves_mask
-                while temp_mask:
-                    lsb = temp_mask & -temp_mask
-                    idx = lsb.bit_length() - 1
-                    move_indices.append(idx)
-                    temp_mask ^= lsb
-                
-                move_indices.sort(key=lambda idx: get_move_score(idx, me_bb, opp_bb), reverse=True)
-
-                current_best = None
-                best_val = -10**9
-                alpha = -10**9
-                beta = 10**9
-                
-                for idx in move_indices:
-                    flips = self.get_flips_bb(idx, me_bb, opp_bb)
-                    new_my = me_bb | (1 << idx) | flips
-                    new_op = opp_bb & ~flips
-                    
-                    val = alphabeta_bb(new_op, new_my, depth_limit - 1, alpha, beta, False)
-                    
-                    if val > best_val:
-                        best_val = val
-                        current_best = idx
-                    if val > alpha:
-                        alpha = val
-                
-                best_move_idx = current_best
-                self.last_depth = depth_limit
-                
-        except TimeoutError:
-            pass
-
-        if best_move_idx is not None:
-            # Convert back to (r, c)
-            r = best_move_idx // self.WIDTH
-            c_aligned = best_move_idx % self.WIDTH
-            c = c_aligned - self.ROW_OFFSETS[r]
-            
-            # Find matching move in legal_moves_list to return full object
-            for m in legal_moves_list:
-                if m[0] == r and m[1] == c:
-                    return m
-            
-        return legal_moves_list[0]
-
-
-class AlphaBetaTTStrategy(AlphaBetaImprovedStrategy):
-    """Alpha-Beta strategy with Transposition Table.
-    Based on AlphaBetaImprovedStrategy (ab2).
-    """
-    name = "ab_tt"
-
-    def __init__(self, depth=100, max_time=3.0):
-        super().__init__(depth=depth, max_time=max_time)
-        self.tt = {}  # Transposition table: hash -> (depth, value, flag)
-
-    def choose_move(self, board, me=1, opp=2):
-        reversi.board_global = board
-        moves = reversi.get_legal_moves(board, me, opp)
-        if not moves:
-            return None
-
-        # Calculate max possible depth based on empty squares
-        empty_squares = sum(row.count(0) for row in board)
-        effective_max_depth = min(self.depth, empty_squares)
-
-        start_time = time.time()
-        best_move = None
-        
-        # TT flags
-        EXACT = 0
-        LOWERBOUND = 1
-        UPPERBOUND = 2
-
-        def board_to_hash(b):
-            # Convert list of lists to tuple of tuples for hashing
-            return tuple(tuple(row) for row in b)
-
-        def alphabeta_tt(b, depth, alpha, beta, current_player):
-            if self.max_time and self.max_time > 0:
-                if time.time() - start_time > self.max_time:
-                    raise TimeoutError()
-
-            alpha_orig = alpha
-            b_hash = board_to_hash(b)
-            
-            # TT Lookup
-            tt_entry = self.tt.get(b_hash)
-            if tt_entry:
-                tt_depth, tt_value, tt_flag = tt_entry
-                if tt_depth >= depth:
-                    if tt_flag == EXACT:
-                        return tt_value
-                    elif tt_flag == LOWERBOUND:
-                        alpha = max(alpha, tt_value)
-                    elif tt_flag == UPPERBOUND:
-                        beta = min(beta, tt_value)
-                    
-                    if alpha >= beta:
-                        return tt_value
-
-            other = 1 if current_player == 2 else 2
-            reversi.board_global = b
-            moves_here = reversi.get_legal_moves(b, current_player, other)
-            
-            if depth == 0 or not moves_here:
-                if not moves_here:
-                    moves_other = reversi.get_legal_moves(b, other, current_player)
-                    if not moves_other:
-                        val = self.evaluate(b, me, opp)
-                        # Store exact value for terminal node
-                        self.tt[b_hash] = (depth, val, EXACT)
-                        return val
-                    # Pass
-                    val = alphabeta_tt(b, depth, alpha, beta, other)
-                    # Store whatever we got back
-                    # Note: Passing doesn't change board, but depth might be different?
-                    # Actually, passing preserves board state but changes player turn.
-                    # Our hash only includes board, not player. 
-                    # This is a potential issue if we don't include player in hash.
-                    # But usually minimax alternates. 
-                    # Let's include current_player in hash to be safe.
-                    return val
-                
-                val = self.evaluate(b, me, opp)
-                self.tt[b_hash] = (depth, val, EXACT)
-                return val
-
-            # order moves by greedy heuristic
-            moves_here = sorted(moves_here, key=lambda mv: reversi.score_move(b, mv, current_player, other), reverse=True)
-
-            if current_player == me:
-                value = -10**9
-                for mv in moves_here:
-                    nb = _deepcopy(b)
-                    engine.apply_move(nb, mv, current_player)
-                    val = alphabeta_tt(nb, depth - 1, alpha, beta, other)
-                    if val > value:
-                        value = val
-                    if value > alpha:
-                        alpha = value
-                    if alpha >= beta:
-                        break
-            else:
-                value = 10**9
-                for mv in moves_here:
-                    nb = _deepcopy(b)
-                    engine.apply_move(nb, mv, current_player)
-                    val = alphabeta_tt(nb, depth - 1, alpha, beta, other)
-                    if val < value:
-                        value = val
-                    if value < beta:
-                        beta = value
-                    if alpha >= beta:
-                        break
-            
-            # TT Store
-            tt_flag = EXACT
-            if value <= alpha_orig:
-                tt_flag = UPPERBOUND
-            elif value >= beta:
-                tt_flag = LOWERBOUND
-            
-            # We need to include player in hash key if we want to be correct for passes
-            # But for now let's stick to board hash as per standard simple implementations,
-            # assuming player is implicit from board state (count of pieces) usually,
-            # but in Reversi passes make it ambiguous.
-            # Let's update the hash function to include player.
-            self.tt[b_hash] = (depth, value, tt_flag)
-            
-            return value
-
-        # Redefine hash to include player
-        def board_player_hash(b, p):
-            return (tuple(tuple(row) for row in b), p)
-
-        # Update the inner function to use the new hash
-        def alphabeta_tt_fixed(b, depth, alpha, beta, current_player):
-            if self.max_time and self.max_time > 0:
-                if time.time() - start_time > self.max_time:
-                    raise TimeoutError()
-
-            alpha_orig = alpha
-            bp_hash = board_player_hash(b, current_player)
-            
-            tt_entry = self.tt.get(bp_hash)
-            if tt_entry:
-                tt_depth, tt_value, tt_flag = tt_entry
-                if tt_depth >= depth:
-                    if tt_flag == EXACT:
-                        return tt_value
-                    elif tt_flag == LOWERBOUND:
-                        alpha = max(alpha, tt_value)
-                    elif tt_flag == UPPERBOUND:
-                        beta = min(beta, tt_value)
-                    
-                    if alpha >= beta:
-                        return tt_value
-
-            other = 1 if current_player == 2 else 2
-            reversi.board_global = b
-            moves_here = reversi.get_legal_moves(b, current_player, other)
-            
-            if depth == 0 or not moves_here:
-                if not moves_here:
-                    moves_other = reversi.get_legal_moves(b, other, current_player)
-                    if not moves_other:
-                        val = self.evaluate(b, me, opp)
-                        self.tt[bp_hash] = (1000, val, EXACT) # Terminal
-                        return val
-                    val = alphabeta_tt_fixed(b, depth, alpha, beta, other)
-                    return val
-                
-                val = self.evaluate(b, me, opp)
-                self.tt[bp_hash] = (depth, val, EXACT)
-                return val
-
-            moves_here = sorted(moves_here, key=lambda mv: reversi.score_move(b, mv, current_player, other), reverse=True)
-
-            if current_player == me:
-                value = -10**9
-                for mv in moves_here:
-                    nb = _deepcopy(b)
-                    engine.apply_move(nb, mv, current_player)
-                    val = alphabeta_tt_fixed(nb, depth - 1, alpha, beta, other)
-                    if val > value:
-                        value = val
-                    if value > alpha:
-                        alpha = value
-                    if alpha >= beta:
-                        break
-            else:
-                value = 10**9
-                for mv in moves_here:
-                    nb = _deepcopy(b)
-                    engine.apply_move(nb, mv, current_player)
-                    val = alphabeta_tt_fixed(nb, depth - 1, alpha, beta, other)
-                    if val < value:
-                        value = val
-                    if value < beta:
-                        beta = value
-                    if alpha >= beta:
-                        break
-            
-            tt_flag = EXACT
-            if value <= alpha_orig:
-                tt_flag = UPPERBOUND
-            elif value >= beta:
-                tt_flag = LOWERBOUND
-            
-            self.tt[bp_hash] = (depth, value, tt_flag)
-            return value
-
-        try:
-            for depth_limit in range(1, max(1, effective_max_depth) + 1):
                 ordered_moves = sorted(reversi.get_legal_moves(board, me, opp), key=lambda mv: reversi.score_move(board, mv, me, opp), reverse=True)
                 current_best_move = None
                 best_val = -10**9
@@ -997,7 +830,7 @@ class AlphaBetaTTStrategy(AlphaBetaImprovedStrategy):
                 for mv in ordered_moves:
                     nb = _deepcopy(board)
                     engine.apply_move(nb, mv, me)
-                    val = alphabeta_tt_fixed(nb, depth_limit - 1, alpha, beta, opp)
+                    val = alphabeta_local(nb, depth_limit - 1, alpha, beta, opp)
                     if val > best_val:
                         best_val = val
                         current_best_move = mv
@@ -1017,9 +850,10 @@ class AlphaBetaBitboardTTStrategy(AlphaBetaBitboardStrategy):
     """
     name = "ab_bit_tt"
 
-    def __init__(self, depth=100, max_time=3.0):
+    def __init__(self, depth=100, max_time=3.0, max_tt_size=1100000):
         super().__init__(depth=depth, max_time=max_time)
-        self.tt = {}  # (me_bb, opp_bb) -> (depth, value, flag)
+        self.tt = OrderedDict()  # (me_bb, opp_bb) -> (depth, value, flag)
+        self.max_tt_size = max_tt_size
 
     def choose_move(self, board, me=1, opp=2):
         reversi.board_global = board
@@ -1062,6 +896,7 @@ class AlphaBetaBitboardTTStrategy(AlphaBetaBitboardStrategy):
             tt_key = (my_b, op_b)
             tt_entry = self.tt.get(tt_key)
             if tt_entry:
+                self.tt.move_to_end(tt_key)
                 tt_depth, tt_value, tt_flag = tt_entry
                 if tt_depth >= depth:
                     if tt_flag == EXACT:
@@ -1081,12 +916,13 @@ class AlphaBetaBitboardTTStrategy(AlphaBetaBitboardStrategy):
                     if opp_moves_mask == 0:
                         val = self.evaluate_bb(my_b if maximizing else op_b, op_b if maximizing else my_b)
                         self.tt[tt_key] = (1000, val, EXACT)
+                        if len(self.tt) > self.max_tt_size:
+                            self.tt.popitem(last=False)
                         return val
-                    val = alphabeta_bb_tt(op_b, my_b, depth, alpha, beta, not maximizing)
-                    return val
-                
                 val = self.evaluate_bb(my_b if maximizing else op_b, op_b if maximizing else my_b)
                 self.tt[tt_key] = (depth, val, EXACT)
+                if len(self.tt) > self.max_tt_size:
+                    self.tt.popitem(last=False)
                 return val
 
             move_indices = []
@@ -1135,6 +971,8 @@ class AlphaBetaBitboardTTStrategy(AlphaBetaBitboardStrategy):
                 tt_flag = LOWERBOUND
             
             self.tt[tt_key] = (depth, value, tt_flag)
+            if len(self.tt) > self.max_tt_size:
+                self.tt.popitem(last=False)
             return value
 
         try:
@@ -1161,32 +999,104 @@ class AlphaBetaBitboardTTStrategy(AlphaBetaBitboardStrategy):
                 best_val = -10**9
                 alpha = -10**9
                 beta = 10**9
-                
+
                 for idx in move_indices:
                     flips = self.get_flips_bb(idx, me_bb, opp_bb)
                     new_my = me_bb | (1 << idx) | flips
                     new_op = opp_bb & ~flips
-                    
+
                     val = alphabeta_bb_tt(new_op, new_my, depth_limit - 1, alpha, beta, False)
-                    
+
                     if val > best_val:
                         best_val = val
                         current_best = idx
                     if val > alpha:
                         alpha = val
-                
+
                 best_move_idx = current_best
                 self.last_depth = depth_limit
-                
+
         except TimeoutError:
             pass
 
         if best_move_idx is not None:
+            # Convert back to (r, c)
             r = best_move_idx // self.WIDTH
             c_aligned = best_move_idx % self.WIDTH
             c = c_aligned - self.ROW_OFFSETS[r]
+            
+            # Find matching move in legal_moves_list to return full object
             for m in legal_moves_list:
                 if m[0] == r and m[1] == c:
                     return m
             
         return legal_moves_list[0]
+
+
+class AlphaBetaBitboardRLStrategy(AlphaBetaBitboardTTStrategy):
+    """Alpha-Beta strategy using bitboards, TT, and learned weights.
+    """
+    name = "ab_bit_rl"
+
+    def __init__(self, depth=100, max_time=3.0, max_tt_size=1000000, weights=None):
+        super().__init__(depth=depth, max_time=max_time, max_tt_size=max_tt_size)
+        # Default weights (similar to heuristic)
+        # Features: [disk_diff, corner_diff, edge_diff, corner_adj_penalty, mobility_diff]
+        if weights is None:
+            self.weights = [10.0, 1000.0, 50.0, -800.0, 20.0]
+        else:
+            self.weights = weights
+
+    def get_features(self, me_bb, opp_bb):
+        # 1. Disk count diff
+        my_count = bin(me_bb).count('1')
+        opp_count = bin(opp_bb).count('1')
+        f1 = my_count - opp_count
+
+        # 2. Corner diff
+        my_corners = bin(me_bb & self.CORNER_MASK).count('1')
+        opp_corners = bin(opp_bb & self.CORNER_MASK).count('1')
+        f2 = my_corners - opp_corners
+
+        # 3. Edge diff
+        my_edges = bin(me_bb & self.EDGE_MASK).count('1')
+        opp_edges = bin(opp_bb & self.EDGE_MASK).count('1')
+        f3 = my_edges - opp_edges
+
+        # 4. Corner adjacent penalty count (how many bad adjacencies I have)
+        # Note: evaluate_bb subtracts 800 for each bad adjacency.
+        # Here we count them.
+        # If I have a piece adjacent to a corner, and that corner is empty -> penalty
+        empty_corners = self.CORNER_MASK & ~(me_bb | opp_bb)
+        bad_adj_count = 0
+        if empty_corners:
+            for c_idx, adj_list in self.CORNER_TO_ADJ.items():
+                if (empty_corners & (1 << c_idx)):
+                    for adj in adj_list:
+                        if (me_bb & (1 << adj)):
+                            bad_adj_count += 1
+                        elif (opp_bb & (1 << adj)):
+                            bad_adj_count -= 1 # Opponent has bad adjacency -> good for me
+        f4 = bad_adj_count
+
+        # 5. Mobility diff
+        my_moves = self.get_moves_bb(me_bb, opp_bb)
+        opp_moves = self.get_moves_bb(opp_bb, me_bb)
+        f5 = bin(my_moves).count('1') - bin(opp_moves).count('1')
+
+        return [f1, f2, f3, f4, f5]
+
+    def evaluate_bb(self, me_bb, opp_bb):
+        features = self.get_features(me_bb, opp_bb)
+        score = sum(w * f for w, f in zip(self.weights, features))
+        return score
+
+    # We don't need to override choose_move if we just want to change evaluation.
+    # The base class choose_move calls evaluate_bb, which we overrode.
+    # However, the base class choose_move defines inner functions like alphabeta_bb_tt
+    # which call self.evaluate_bb. So it should work fine.
+    # BUT, the base class choose_move also defines get_move_score which uses hardcoded weights for move ordering.
+    # We might want to update that too, but for now let's stick to overriding evaluate_bb.
+    # The only issue is if we want to use the learned weights for move ordering too.
+    # For now, let's just use the base class choose_move.
+

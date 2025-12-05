@@ -1,5 +1,3 @@
-import sys
-
 def read_board():
     # Read exactly 8 lines
     row_lengths = [8,10,12,14,14,12,10,8]
@@ -23,6 +21,34 @@ def read_board():
         board.append(vals)
 
     # print([print(b) for b in board], len(board), [len(b) for b in board])
+    return board
+
+def read_board_lines(lines):
+    # Read exactly 8 lines from list of strings
+    row_lengths = [8,10,12,14,14,12,10,8]
+    board = []
+
+    for i, ln in enumerate(row_lengths):
+        if i < len(lines):
+            line = lines[i]
+        else:
+            line = ''
+        parts = line.strip().split()
+
+        # parse up to expected length for this row
+        vals = []
+        for j, tok in enumerate(parts[:ln]):
+            try:
+                vals.append(int(tok))
+            except ValueError:
+                vals.append(0)
+        
+        # Pad with 0 if line is short
+        if len(vals) < ln:
+            vals += [0] * (ln - len(vals))
+
+        board.append(vals)
+
     return board
 
 

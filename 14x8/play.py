@@ -1,16 +1,7 @@
 #!/usr/bin/env python3
 import argparse
 import random
-try:
-    from tqdm import tqdm
-except ImportError:
-    class tqdm:
-        def __init__(self, *args, **kwargs): pass
-        def update(self, n=1): pass
-        def close(self): pass
-        def __enter__(self): return self
-        def __exit__(self, *args): pass
-
+from tqdm import tqdm
 from strategies import RandomStrategy, GreedyStrategy, CornerFirstStrategy, AlphaBetaStrategy, AlphaBetaImprovedStrategy, AlphaBetaOptimizedStrategy, AlphaBetaTTStrategy, AlphaBetaBitboardStrategy, AlphaBetaBitboardTTStrategy
 import engine
 from engine import play_game

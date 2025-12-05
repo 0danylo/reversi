@@ -68,6 +68,8 @@ def make_strategy(name, depth=None, max_time=None):
         return strategies.AlphaBetaBitboardStrategy(depth=depth if depth is not None else 3, max_time=max_time)
     if n in ("ab_bit_tt", "ab_bitboard_tt"):
         return strategies.AlphaBetaBitboardTTStrategy(depth=depth if depth is not None else 3, max_time=max_time)
+    if n in ("ab_bit_rl", "ab_rl"):
+        return strategies.AlphaBetaBitboardRLStrategy(depth=depth if depth is not None else 3, max_time=max_time)
     raise SystemExit(f"Unknown strategy: {name}")
 
 
