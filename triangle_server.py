@@ -143,12 +143,13 @@ def run_player(command, board_str):
         print(f"Exception running {command}: {e}")
         return None
 
-def play_game(p1_cmd, p2_cmd, verbose=False):
+def play_game(p1_cmd, p2_cmd, verbose=False, disable_progress=False):
     board = get_initial_board()
     current_player = 1
     skipped_last = False
     
-    pbar = tqdm(total=106, disable=verbose, desc="Game Progress", unit="move")
+    # Disable progress bar if requested OR if verbose logging is on (to prevent output mixing)
+    pbar = tqdm(total=106, disable=(disable_progress or verbose), desc="Game Progress", unit="move")
     
     while True:
         # Check if current player has moves
@@ -200,6 +201,7 @@ def play_game(p1_cmd, p2_cmd, verbose=False):
     p1_score = sum(row.count(1) for row in board)
     p2_score = sum(row.count(2) for row in board)
     
+    # [print(f'{OFFSETS[i]}{b}') for i, b in enumerate(board)]
     return p1_score, p2_score
 
 def main():
