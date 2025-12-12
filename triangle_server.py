@@ -180,9 +180,12 @@ def play_game(p1_cmd, p2_cmd, verbose=False, disable_progress=False):
             parts = output.split()
             if len(parts) < 2:
                 raise ValueError("Not enough parts")
-            r, c = int(parts[0]), int(parts[1])
-        except ValueError:
-            if verbose: print(f"Invalid output from Player {current_player}: {output}")
+            # Bot outputs 1-indexed row and 1-indexed local column
+            r_1idx, local_c_1idx = int(parts[0]), int(parts[1])
+            r = r_1idx - 1  # Convert to 0-indexed row
+            c = OFFSETS[r] + (local_c_1idx - 1)  # Convert local column to global
+        except (ValueError, IndexError) as e:
+            if verbose: print(f"Invalid output from Player {current_player}: {output} ({e})")
             break
             
         flips = get_flips(board, current_player, r, c)

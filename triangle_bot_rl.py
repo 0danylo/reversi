@@ -383,7 +383,9 @@ def main():
     move = bot.choose_move(board_input)
     
     if move:
-        print(f"{move[0]} {move[1]}")
+        r, c = move[0], move[1]
+        local_c = c - bot.OFFSETS[r]
+        print(f"{r + 1} {local_c + 1}")  # Output 1-indexed row and local column
     else:
         print("0 0")
 
